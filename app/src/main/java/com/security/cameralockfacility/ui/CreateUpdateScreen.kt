@@ -1,5 +1,7 @@
 package com.security.cameralockfacility.ui
 
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -171,11 +173,7 @@ fun CreateUpdateScreen(
             // Timezone
             CustomDropdown(
                 label = "Timezone",
-                options = listOf(
-                    "UTC", "Asia/Kolkata", "America/New_York", "America/Chicago",
-                    "America/Denver", "America/Los_Angeles", "Europe/London",
-                    "Europe/Paris", "Asia/Tokyo", "Asia/Shanghai", "Australia/Sydney"
-                ),
+                options = listOf("Asia/Kolkata", "UTC",),
                 selectedOption = timezone,
                 onOptionSelected = { timezone = it }
             )
@@ -310,11 +308,18 @@ fun CustomDropdown(
                 value = selectedOption,
                 onValueChange = {},
                 readOnly = true,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = true },
                 shape = RoundedCornerShape(10.dp),
                 trailingIcon = {
                     IconButton(onClick = { expanded = !expanded }) {
-                        Icon(Icons.Default.ArrowDropDown, null, tint = Color.White)
+                        Icon(
+                            Icons.Default.ArrowDropDown,
+                            null,
+                            tint = Color.White,
+                            modifier = Modifier.rotate(if (expanded) 180f else 0f)
+                        )
                     }
                 },
                 colors = OutlinedTextFieldDefaults.colors(
