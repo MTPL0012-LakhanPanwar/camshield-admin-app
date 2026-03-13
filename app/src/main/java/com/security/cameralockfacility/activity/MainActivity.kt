@@ -14,6 +14,7 @@ import com.security.cameralockfacility.ui.AdminSplashScreen
 import com.security.cameralockfacility.ui.CreateUpdateScreen
 import com.security.cameralockfacility.ui.DashboardScreen
 import com.security.cameralockfacility.ui.DeviceDetailScreen
+import com.security.cameralockfacility.ui.FacilityDetailScreen
 import com.security.cameralockfacility.ui.LoginScreen
 import com.security.cameralockfacility.ui.RegisterScreen
 import com.security.cameralockfacility.ui.theme.CameraLockFacilityTheme
@@ -92,6 +93,21 @@ class MainActivity : ComponentActivity() {
                             facilityId = facilityId,
                             navController = navController,
                             viewModel = facilityViewModel
+                        )
+                    }
+
+                    composable("facility/detail/{facilityId}") { backStack ->
+                        val facilityId = backStack.arguments?.getString("facilityId") ?: return@composable
+                        FacilityDetailScreen(
+                            facilityId = facilityId,
+                            navController = navController,
+                            viewModel = facilityViewModel,
+                            onUnauthorized = {
+                                authViewModel.logout()
+                                navController.navigate("login") {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            }
                         )
                     }
 

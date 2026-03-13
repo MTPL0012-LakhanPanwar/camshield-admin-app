@@ -14,12 +14,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material3.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -38,12 +49,15 @@ import com.security.cameralockfacility.viewmodel.FacilityViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import android.graphics.Color as AndroidColor
 
 private val QrBgDark = Color(0xFF0B101F)
 private val QrCardBg = Color(0xFF161C2C)
 private val QrAccentBlue = Color(0xFF2196F3)
 private val QrTextGray = Color(0xFF8A92A6)
 private val QrStatusRed = Color(0xFFEF5350)
+private val QrStatusGreen = Color(0xFF4CAF50)
 
 enum class QRType { ENTRY, EXIT }
 
@@ -58,9 +72,23 @@ fun QRCodeDialog(
     val qrState by viewModel.qrState.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var pendingDownload by remember { mutableStateOf<PendingDownload?>(null) }
+    val performSave: (Bitmap, String) -> Unit = { bitmap, filename ->
+        scope.launch {
+            val success = withContext(Dispatchers.IO) { saveQRToDownloads(context, bitmap, filename) }
+            showSnackbar(if (success) "\"$filename.png\" saved to Downloads" else "Failed to save QR code")
+        }
+    }
 
-    LaunchedEffect(facility.id) {
-        viewModel.loadQRCodes(facility.id)
+    val embeddedPair = remember(facility.activeQRCodes) {
+        val entry = facility.activeQRCodes.firstOrNull { it.type.equals("entry", true) }
+        val exit = facility.activeQRCodes.firstOrNull { it.type.equals("exit", true) }
+        QRPair(entry = entry, exit = exit)
+    }
+
+    LaunchedEffect(facility.id, embeddedPair) {
+        val hasEmbedded = embeddedPair.entry != null || embeddedPair.exit != null
+        if (!hasEmbedded) viewModel.loadQRCodes(facility.id)
     }
 
     Dialog(
@@ -79,10 +107,10 @@ fun QRCodeDialog(
         ) {
             Column(
                 modifier = Modifier
-                    .padding(20.dp)
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Header
                 Text(
@@ -101,7 +129,9 @@ fun QRCodeDialog(
 
                 HorizontalDivider(color = Color(0xFF2A3245))
 
-                when (val state = qrState) {
+                val state = qrState
+                val fallbackPair = if (embeddedPair.entry != null || embeddedPair.exit != null) embeddedPair else null
+                when (state) {
                     is ApiResult.Loading -> {
                         Box(
                             modifier = Modifier
@@ -114,119 +144,219 @@ fun QRCodeDialog(
                     }
 
                     is ApiResult.Error -> {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.padding(vertical = 16.dp)
-                        ) {
-                            Text(
-                                state.message,
-                                color = QrStatusRed,
-                                textAlign = TextAlign.Center,
-                                fontSize = 14.sp
+                        if (fallbackPair == null) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.padding(vertical = 16.dp)
+                            ) {
+                                Text(
+                                    state.message,
+                                    color = QrStatusRed,
+                                    textAlign = TextAlign.Center,
+                                    fontSize = 14.sp
+                                )
+                                Button(
+                                    onClick = { viewModel.loadQRCodes(facility.id) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = QrAccentBlue)
+                                ) { Text("Retry") }
+                            }
+                        } else {
+                            QRContent(
+                                qrPair = fallbackPair,
+                                focus = focus,
+                                facility = facility,
+                                showSnackbar = showSnackbar,
+                                context = context,
+                                scope = scope,
+                                onDownloadConflict = { pendingDownload = it },
+                                onSave = performSave
                             )
-                            Button(
-                                onClick = { viewModel.loadQRCodes(facility.id) },
-                                colors = ButtonDefaults.buttonColors(containerColor = QrAccentBlue)
-                            ) { Text("Retry") }
                         }
                     }
 
                     is ApiResult.Success -> {
-                        val qrPair = state.data
-                        val requestedQrs = when (focus) {
-                            QRType.ENTRY -> listOfNotNull(qrPair.entry)
-                            QRType.EXIT -> listOfNotNull(qrPair.exit)
-                            null -> listOfNotNull(qrPair.entry, qrPair.exit)
-                        }
-
-                        if (requestedQrs.isEmpty()) {
-                            Text(
-                                "QR code not available for this selection.",
-                                color = QrStatusRed,
-                                textAlign = TextAlign.Center
-                            )
-                        } else {
-                            val allBitmaps = remember { mutableStateMapOf<String, Bitmap>() }
-
-                            // Generate only the requested QR bitmaps
-                            LaunchedEffect(qrPair, focus) {
-                                requestedQrs.forEach { qr ->
-                                    val content = qr.value.ifBlank { qr.id }
-                                    if (content.isNotBlank()) {
-                                        val bmp = withContext(Dispatchers.Default) {
-                                            generateQRBitmap(content)
-                                        }
-                                        if (bmp != null) allBitmaps[qr.id] = bmp
-                                    }
-                                }
-                            }
-
-                            fun downloadBitmap(bitmap: Bitmap, filename: String) {
-                                scope.launch {
-                                    val success = withContext(Dispatchers.IO) {
-                                        saveQRToDownloads(context, bitmap, filename)
-                                    }
-                                    showSnackbar(
-                                        if (success) "\"$filename\" saved to Downloads"
-                                        else "Failed to save QR code"
-                                    )
-                                }
-                            }
-
-                            requestedQrs.forEachIndexed { index, qrData ->
-                                val isEntry = qrData.id == qrPair.entry?.id
-                                val label = if (isEntry) "Entry QR Code" else "Exit QR Code"
-                                val filename = if (isEntry) "${facility.name}_entry_qr" else "${facility.name}_exit_qr"
-                                QRCodeSection(
-                                    label = label,
-                                    qrData = qrData,
-                                    bitmap = allBitmaps[qrData.id],
-                                    onDownload = { bmp -> downloadBitmap(bmp, filename) }
-                                )
-                                if (index < requestedQrs.lastIndex && focus == null) {
-                                    HorizontalDivider(color = Color(0xFF2A3245))
-                                }
-                            }
-
-                            // Download Both button (only when showing both)
-                            val entryBmp = qrPair.entry?.id?.let { allBitmaps[it] }
-                            val exitBmp = qrPair.exit?.id?.let { allBitmaps[it] }
-                            if (focus == null && entryBmp != null && exitBmp != null) {
-                                Button(
-                                    onClick = {
-                                        downloadBitmap(entryBmp, "${facility.name}_entry_qr")
-                                        downloadBitmap(exitBmp, "${facility.name}_exit_qr")
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(containerColor = QrAccentBlue),
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.Download,
-                                        null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Download Both QR Codes", fontWeight = FontWeight.SemiBold)
-                                }
-                            }
-                        }
+                        QRContent(
+                            qrPair = state.data,
+                            focus = focus,
+                            facility = facility,
+                            showSnackbar = showSnackbar,
+                            context = context,
+                            scope = scope,
+                            onDownloadConflict = { pendingDownload = it },
+                            onSave = performSave
+                        )
                     }
 
-                    null -> {}
+                    null -> {
+                        fallbackPair?.let {
+                            QRContent(
+                                qrPair = it,
+                                focus = focus,
+                                facility = facility,
+                                showSnackbar = showSnackbar,
+                                context = context,
+                                scope = scope,
+                                onDownloadConflict = { pendingDownload = it },
+                                onSave = performSave
+                            )
+                        }
+                    }
                 }
 
-                TextButton(
+                OutlinedButton(
                     onClick = {
                         viewModel.resetQR()
                         onDismiss()
                     },
-                    modifier = Modifier.align(Alignment.End)
+                    modifier = Modifier.align(Alignment.End),
+                    border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(width = 1.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = QrTextGray)
                 ) {
-                    Text("Close", color = QrTextGray)
+                    Text("Close")
                 }
             }
+        }
+    }
+
+    pendingDownload?.let { pending ->
+        AlertDialog(
+            onDismissRequest = { pendingDownload = null },
+            modifier = Modifier.fillMaxWidth(1f),
+            confirmButton = {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 6.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            pendingDownload = null
+                            val filename = "${pending.baseName}_copy"
+                            performSave(pending.bitmap, filename)
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = QrAccentBlue),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(vertical = 10.dp)
+                    ) { Text("Download Again", color = Color.White) }
+                    OutlinedButton(
+                        onClick = { pendingDownload = null },
+                        modifier = Modifier.weight(1f),
+                        border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(width = 1.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = QrTextGray),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(vertical = 10.dp)
+                    ) { Text("Keep Existing") }
+                }
+            },
+            dismissButton = {},
+            title = { Text("Already downloaded", color = Color.White) },
+            text = { Text("You already saved this QR. Do you want to download a fresh copy?", color = QrTextGray) },
+            containerColor = QrCardBg,
+            tonalElevation = 4.dp,
+            shape = RoundedCornerShape(14.dp)
+        )
+    }
+}
+
+@Composable
+private fun QRContent(
+    qrPair: QRPair,
+    focus: QRType?,
+    facility: FacilityData,
+    showSnackbar: (String) -> Unit,
+    context: Context,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onDownloadConflict: (PendingDownload) -> Unit,
+    onSave: (Bitmap, String) -> Unit
+) {
+    val requestedQrs = when (focus) {
+        QRType.ENTRY -> listOfNotNull(qrPair.entry)
+        QRType.EXIT -> listOfNotNull(qrPair.exit)
+        null -> listOfNotNull(qrPair.entry, qrPair.exit)
+    }
+
+    if (requestedQrs.isEmpty()) {
+        Text(
+            "QR code not available for this selection.",
+            color = QrStatusRed,
+            textAlign = TextAlign.Center
+        )
+        return
+    }
+
+    val allBitmaps = remember { mutableStateMapOf<String, Bitmap>() }
+
+    // Generate only the requested QR bitmaps
+    LaunchedEffect(qrPair, focus) {
+        requestedQrs.forEach { qr ->
+            val content = qr.url
+                .ifBlank { qr.value }
+                .ifBlank { qr.token }
+                .ifBlank { qr.qrCodeId ?: "" }
+                .ifBlank { qr.id }
+            if (content.isNotBlank()) {
+                val bmp = withContext(Dispatchers.Default) {
+                    generateQRBitmap(content)
+                }
+                if (bmp != null) allBitmaps[qr.id] = bmp
+            }
+        }
+    }
+
+    fun handleDownload(bitmap: Bitmap, qrData: QRData, isEntry: Boolean, force: Boolean = false) {
+        val validDate = qrData.generatedForDate ?: qrData.validUntil ?: qrData.validFrom ?: qrData.qrCodeId ?: "qr"
+        val dateStr = validDate.take(10).ifBlank { "qr" }
+        val baseName = if (isEntry) "Entry_Code_$dateStr" else "Exit_Code_$dateStr"
+        val filename = if (force) "${baseName}_${System.currentTimeMillis()}" else baseName
+        val alreadyExists = !force && fileExists(context, "$baseName.png")
+        if (alreadyExists) {
+            onDownloadConflict(PendingDownload(bitmap, baseName, qrData, isEntry))
+        } else {
+            onSave(bitmap, filename)
+        }
+    }
+
+    requestedQrs.forEachIndexed { index, qrData ->
+        val isEntry = qrData.type.equals("entry", ignoreCase = true) ||
+            qrData.id == qrPair.entry?.id ||
+            qrData.qrCodeId == qrPair.entry?.qrCodeId
+        val label = if (isEntry) "Entry QR Code" else "Exit QR Code"
+        QRCodeSection(
+            label = label,
+            qrData = qrData,
+            bitmap = allBitmaps[qrData.id],
+            onDownload = { bmp -> handleDownload(bmp, qrData, isEntry) }
+        )
+        if (index < requestedQrs.lastIndex && focus == null) {
+            HorizontalDivider(color = Color(0xFF2A3245))
+        }
+    }
+
+    // Download Both button (only when showing both)
+    val entryBmp = qrPair.entry?.id?.let { allBitmaps[it] }
+    val exitBmp = qrPair.exit?.id?.let { allBitmaps[it] }
+    if (focus == null && entryBmp != null && exitBmp != null) {
+        Button(
+            onClick = {
+                handleDownload(entryBmp, qrPair.entry!!, true)
+                handleDownload(exitBmp, qrPair.exit!!, false)
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .wrapContentWidth(Alignment.CenterHorizontally),
+            colors = ButtonDefaults.buttonColors(containerColor = QrAccentBlue),
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Icon(
+                Icons.Default.Download,
+                null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text("Download Both QR Codes", fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -240,7 +370,7 @@ private fun QRCodeSection(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
             label,
@@ -253,8 +383,7 @@ private fun QRCodeSection(
             Box(
                 modifier = Modifier
                     .size(200.dp)
-                    .background(Color.White, RoundedCornerShape(12.dp))
-                    .padding(8.dp),
+                    .clip(RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
@@ -277,8 +406,26 @@ private fun QRCodeSection(
                 )
             }
         }
-        if (qrData.name.isNotBlank()) {
-            Text(qrData.name, color = QrTextGray, fontSize = 12.sp, textAlign = TextAlign.Center)
+        val validDate = (qrData.generatedForDate ?: qrData.validUntil ?: qrData.validFrom).orEmpty().take(10)
+        val hasStatus = qrData.status.isNotBlank()
+        if (validDate.isNotBlank() || hasStatus) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (validDate.isNotBlank()) {
+                    Text("Valid: $validDate", color = QrTextGray, fontSize = 11.sp)
+                }
+                if (hasStatus) {
+                    val isActive = qrData.status.equals("active", true)
+                    Text(
+                        "QR Status: ${qrData.status.replaceFirstChar { it.uppercase() }}",
+                        color = if (isActive) QrStatusGreen else QrStatusRed,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
         }
         if (bitmap != null) {
             OutlinedButton(
@@ -288,7 +435,7 @@ private fun QRCodeSection(
                 border = androidx.compose.foundation.BorderStroke(1.dp, QrAccentBlue)
             ) {
                 Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(4.dp))
                 Text("Download", fontSize = 13.sp)
             }
         }
@@ -302,7 +449,11 @@ private fun generateQRBitmap(content: String, size: Int = 512): Bitmap? {
         Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).also { bmp ->
             for (x in 0 until size) {
                 for (y in 0 until size) {
-                    bmp.setPixel(x, y, if (bitMatrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+                    bmp.setPixel(
+                        x,
+                        y,
+                        if (bitMatrix[x, y]) AndroidColor.BLACK else AndroidColor.WHITE
+                    )
                 }
             }
         }
@@ -341,3 +492,31 @@ private fun saveQRToDownloads(context: Context, bitmap: Bitmap, filename: String
         false
     }
 }
+
+private fun fileExists(context: Context, filenameWithExt: String): Boolean {
+    return try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val projection = arrayOf(MediaStore.MediaColumns.DISPLAY_NAME)
+            context.contentResolver.query(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                projection,
+                "${MediaStore.MediaColumns.DISPLAY_NAME} = ?",
+                arrayOf(filenameWithExt),
+                null
+            )?.use { cursor -> cursor.moveToFirst() }
+                ?: false
+        } else {
+            @Suppress("DEPRECATION")
+            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), filenameWithExt).exists()
+        }
+    } catch (e: Exception) {
+        false
+    }
+}
+
+private data class PendingDownload(
+    val bitmap: Bitmap,
+    val baseName: String,
+    val qrData: QRData,
+    val isEntry: Boolean
+)

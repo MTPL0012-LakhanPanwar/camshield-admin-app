@@ -30,6 +30,11 @@ import com.security.cameralockfacility.modal.ApiResult
 import com.security.cameralockfacility.modal.EnrollmentDetail
 import com.security.cameralockfacility.viewmodel.DeviceViewModel
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 private val BgDark = Color(0xFF0B101F)
 private val CardBg = Color(0xFF161C2C)
@@ -223,7 +228,7 @@ private fun EnrollmentDetailContent(
             }
             val lastSeen = selectedDevice?.lastActivity ?: selectedDevice?.updatedAt ?: selectedDevice?.createdAt
             if (!lastSeen.isNullOrBlank()) {
-                DetailRow("Last Active", lastSeen.replace("T", " ").take(19))
+                DetailRow("Last Active", formatDateTimeFriendly(lastSeen))
             }
         }
 
@@ -242,7 +247,7 @@ private fun EnrollmentDetailContent(
                 DetailRow("Entry QR Code", qr.name.ifBlank { qr.id })
             }
             if (enrollment.enrolledAt.isNotBlank()) {
-                DetailRow("Enrolled At", enrollment.enrolledAt.take(19).replace("T", " "))
+                DetailRow("Enrolled At", formatDateTimeFriendly(enrollment.enrolledAt))
             }
         }
 
@@ -251,7 +256,8 @@ private fun EnrollmentDetailContent(
         Button(
             onClick = onForceExitClick,
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxWidth(0.75f)
+                .align(Alignment.CenterHorizontally)
                 .height(56.dp),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = DangerRed),
@@ -315,11 +321,11 @@ private fun DetailRow(
             .fillMaxWidth()
             .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.Top
     ) {
         Text(label, color = TextGray, fontSize = 13.sp, modifier = Modifier.weight(0.45f))
         if (valueContent != null) {
-            Box(modifier = Modifier.weight(0.55f), contentAlignment = Alignment.CenterEnd) {
+            Box(modifier = Modifier.weight(0.55f), contentAlignment = Alignment.TopStart) {
                 valueContent(value)
             }
         } else {
@@ -329,9 +335,21 @@ private fun DetailRow(
                 fontSize = if (smallText) 11.sp else 13.sp,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(0.55f),
-                textAlign = androidx.compose.ui.text.style.TextAlign.End
+                textAlign = androidx.compose.ui.text.style.TextAlign.Start
             )
         }
+    }
+}
+
+private val detailFriendlyFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy, h:mm a")
+private fun formatDateTimeFriendly(raw: String): String = runCatching {
+    detailFriendlyFormatter.format(ZonedDateTime.ofInstant(Instant.parse(raw), ZoneId.systemDefault()))
+}.getOrElse {
+    runCatching {
+        val cleaned = raw.removeSuffix("Z")
+        detailFriendlyFormatter.format(LocalDateTime.parse(cleaned).atZone(ZoneId.systemDefault()))
+    }.getOrElse {
+        raw.replace("T", " ").take(19)
     }
 }
 
@@ -384,8 +402,8 @@ private fun ForceExitDialog(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)
+                    .padding(top = 1.dp),
+                horizontalArrangement = Arrangement.spacedBy(15.dp, Alignment.CenterHorizontally)
             ) {
                 OutlinedButton(
                     onClick = { if (!isLoading) onDismiss() },

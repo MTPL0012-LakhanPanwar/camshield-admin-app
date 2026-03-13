@@ -2,6 +2,7 @@ package com.security.cameralockfacility.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,6 +37,11 @@ import com.security.cameralockfacility.viewmodel.FacilityViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.debounce
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 private val FcBgDark = Color(0xFF0B101F)
 private val FcCardBg = Color(0xFF161C2C)
@@ -198,7 +204,8 @@ fun FacilityContent(
                                 facility = facility,
                                 onUpdate = { navController.navigate("facility/edit/${facility.id}") },
                                 onDelete = { facilityToDelete = facility },
-                                onQRCode = { qrType -> facilityForQR = facility to qrType }
+                                onQRCode = { qrType -> facilityForQR = facility to qrType },
+                                onView = { if (facility.id.isNotBlank()) navController.navigate("facility/detail/${facility.id}") }
                             )
                         }
                         if (isLoading) {
@@ -261,10 +268,13 @@ fun FacilityCardComposable(
     facility: FacilityData,
     onUpdate: () -> Unit,
     onDelete: () -> Unit,
-    onQRCode: (QRType) -> Unit
+    onQRCode: (QRType) -> Unit,
+    onView: () -> Unit = {}
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onView() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = FcCardBg)
     ) {
@@ -319,10 +329,10 @@ fun FacilityCardComposable(
 
             if (!facility.createdAt.isNullOrBlank()) {
                 Text(
-                    "Created: ${facility.createdAt.take(10)}",
+                    "Created: ${formatDateFriendly(facility.createdAt)}",
                     color = FcTextGray,
                     fontSize = 11.sp,
-                    modifier = Modifier.padding(top = 4.dp)
+                    modifier = Modifier.padding(top = 8.dp)
                 )
             }
 
@@ -331,13 +341,13 @@ fun FacilityCardComposable(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     QRAction(iconLabel = "Entry", onClick = { onQRCode(QRType.ENTRY) })
                     QRAction(iconLabel = "Exit", onClick = { onQRCode(QRType.EXIT) })
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedButton(
                         onClick = onDelete,
                         border = BorderStroke(1.dp, FcStatusRed),
@@ -404,6 +414,16 @@ private fun FacilityStatusBadge(status: String) {
             fontWeight = FontWeight.Bold
         )
     }
+}
+
+private val facilityCardFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy")
+private fun formatDateFriendly(raw: String): String = runCatching {
+    facilityCardFormatter.format(ZonedDateTime.ofInstant(Instant.parse(raw), ZoneId.systemDefault()))
+}.getOrElse {
+    runCatching {
+        val cleaned = raw.removeSuffix("Z")
+        facilityCardFormatter.format(LocalDateTime.parse(cleaned).atZone(ZoneId.systemDefault()))
+    }.getOrElse { raw.take(10) }
 }
 
 @Composable
@@ -483,7 +503,8 @@ fun PreviewFacilityCard() {
             facility = mockFacility,
             onUpdate = {},
             onDelete = {},
-            onQRCode = {}
+            onQRCode = {},
+            onView = {}
         )
     }
 }

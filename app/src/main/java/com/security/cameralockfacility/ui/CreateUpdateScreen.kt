@@ -201,7 +201,10 @@ fun CreateUpdateScreen(
                         viewModel.createFacility(name, description, address, city, state, country, emailList, timezone, status)
                     }
                 },
-                modifier = Modifier.fillMaxWidth().height(56.dp),
+                modifier = Modifier
+                    .fillMaxWidth(0.50f)
+                    .align(Alignment.CenterHorizontally)
+                    .height(56.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = CuAccentBlue),
                 enabled = !isSaving

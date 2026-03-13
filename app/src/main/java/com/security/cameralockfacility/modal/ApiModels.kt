@@ -36,13 +36,26 @@ data class FacilityData(
     val notificationEmails: List<String> = emptyList(),
     val timezone: String? = null,
     val status: String = "active",
-    val createdAt: String? = null
+    val createdAt: String? = null,
+    val updatedAt: String? = null,
+    val activeQRCodes: List<QRData> = emptyList()
 )
 
 data class QRData(
     val id: String = "",
     val name: String = "",
-    val value: String = ""   // actual content encoded in the QR image
+    val value: String = "",
+    val type: String = "",
+    val action: String = "",
+    val status: String = "",
+    val validFrom: String? = null,
+    val validUntil: String? = null,
+    val generatedForDate: String? = null,
+    val token: String = "",
+    val url: String = "",
+    val imagePath: String? = null,
+    val imageUrl: String? = null,
+    val qrCodeId: String? = null
 )
 
 data class QRPair(

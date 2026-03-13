@@ -194,7 +194,13 @@ class ApiService(context: Context) {
                 }
             )
         },
-        createdAt = obj.optString("createdAt").takeIf { it.isNotBlank() }
+        createdAt = obj.optString("createdAt").takeIf { it.isNotBlank() },
+        updatedAt = obj.optString("updatedAt").takeIf { it.isNotBlank() },
+        activeQRCodes = obj.optJSONArray("activeQRCodes")?.let { arr ->
+            (0 until arr.length()).mapNotNull { idx ->
+                arr.optJSONObject(idx)?.let { parseQR(it) }
+            }
+        } ?: emptyList()
     )
 
     suspend fun getFacilityQRCodes(facilityId: String): ApiResult<QRPair> {
@@ -206,21 +212,46 @@ class ApiService(context: Context) {
     }
 
     private fun parseQRPair(obj: JSONObject) = QRPair(
-        entry = obj.optJSONObject("entry")?.let {
-            QRData(
-                id = it.optString("id").ifBlank { it.optString("_id") },
-                name = it.optString("name"),
-                value = it.optString("value")
-            )
-        },
-        exit = obj.optJSONObject("exit")?.let {
-            QRData(
-                id = it.optString("id").ifBlank { it.optString("_id") },
-                name = it.optString("name"),
-                value = it.optString("value")
-            )
-        }
+        entry = obj.optJSONObject("entry")?.let { parseQR(it, "entry") },
+        exit = obj.optJSONObject("exit")?.let { parseQR(it, "exit") }
     )
+
+    private fun parseQR(obj: JSONObject, defaultType: String? = null): QRData {
+        val type = obj.optString("type").ifBlank { defaultType ?: "" }
+        val qrCodeId = obj.optString("qrCodeId")
+            .ifBlank { obj.optString("id") }
+            .ifBlank { obj.optString("_id") }
+        val url = obj.optString("url")
+        val token = obj.optString("token")
+        val value = obj.optString("value")
+            .takeIf { it.isNotBlank() }
+            ?: url.takeIf { it.isNotBlank() }
+            ?: token.takeIf { it.isNotBlank() }
+            ?: qrCodeId
+            ?: ""
+
+        val displayName = obj.optString("name")
+            .takeIf { it.isNotBlank() }
+            ?: qrCodeId.takeIf { it.isNotBlank() }
+            ?: if (type.isNotBlank()) "${type.replaceFirstChar { it.uppercase() }} QR Code" else ""
+
+        return QRData(
+            id = obj.optString("id").ifBlank { obj.optString("_id") }.ifBlank { qrCodeId },
+            name = displayName,
+            value = value,
+            type = type,
+            action = obj.optString("action"),
+            status = obj.optString("status"),
+            validFrom = obj.optString("validFrom").takeIf { it.isNotBlank() },
+            validUntil = obj.optString("validUntil").takeIf { it.isNotBlank() },
+            generatedForDate = obj.optString("generatedForDate").takeIf { it.isNotBlank() },
+            token = token,
+            url = url,
+            imagePath = obj.optString("imagePath").takeIf { it.isNotBlank() },
+            imageUrl = obj.optString("imageUrl").takeIf { it.isNotBlank() },
+            qrCodeId = qrCodeId.takeIf { it.isNotBlank() }
+        )
+    }
 
     private fun parseDeviceInfo(obj: JSONObject) = DeviceInfo(
         deviceId = obj.optString("deviceId")
@@ -269,7 +300,7 @@ class ApiService(context: Context) {
         enrollmentId = obj.optString("enrollmentId"),
         device = obj.optJSONObject("device")?.let { parseDeviceInfo(it) } ?: parseDeviceInfo(obj),
         facility = obj.optJSONObject("facility")?.let { parseFacility(it) } ?: FacilityData(),
-        entryQRCode = obj.optJSONObject("entryQRCode")?.let { QRData(it.optString("id"), it.optString("name")) },
+        entryQRCode = obj.optJSONObject("entryQRCode")?.let { parseQR(it, "entry") },
         enrolledAt = obj.optString("enrolledAt")
     )
 

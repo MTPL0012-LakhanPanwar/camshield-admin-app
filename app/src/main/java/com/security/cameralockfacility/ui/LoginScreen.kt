@@ -1,8 +1,10 @@
 package com.security.cameralockfacility.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -12,7 +14,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -21,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.security.cameralockfacility.modal.ApiResult
+import com.security.cameralockfacility.R
 import com.security.cameralockfacility.viewmodel.AuthViewModel
 import kotlinx.coroutines.launch
 
@@ -75,6 +80,21 @@ fun LoginScreen(navController: NavHostController, viewModel: AuthViewModel) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Logo + Title
+            Box(
+                modifier = Modifier
+                    .size(96.dp)
+                    .shadow(12.dp, CircleShape)
+                    .background(CardBg, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.admin),
+                    contentDescription = "App logo",
+                    modifier = Modifier.size(60.dp)
+                )
+            }
+            Spacer(Modifier.height(16.dp))
             Text(
                 "SECURE ZONE",
                 color = Color.White,
@@ -87,7 +107,7 @@ fun LoginScreen(navController: NavHostController, viewModel: AuthViewModel) {
                 color = AccentBlue,
                 fontSize = 14.sp,
                 letterSpacing = 4.sp,
-                modifier = Modifier.padding(top = 4.dp, bottom = 40.dp)
+                modifier = Modifier.padding(top = 4.dp, bottom = 32.dp)
             )
 
             Card(
@@ -127,7 +147,8 @@ fun LoginScreen(navController: NavHostController, viewModel: AuthViewModel) {
                             }
                         },
                         modifier = Modifier
-                            .fillMaxWidth()
+                            .fillMaxWidth(0.60f)
+                            .align(Alignment.CenterHorizontally)
                             .height(52.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),

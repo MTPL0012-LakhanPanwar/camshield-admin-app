@@ -30,6 +30,11 @@ import com.security.cameralockfacility.viewmodel.DeviceViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.debounce
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 private val FxBgDark = Color(0xFF0B101F)
 private val FxCardBg = Color(0xFF161C2C)
@@ -263,9 +268,7 @@ private fun ActiveDeviceCardItem(device: ActiveDeviceItem, onClick: () -> Unit) 
                 val visitorLabel = device.visitorId.ifBlank { "Unknown" }
                 InfoTag("Visitor: $visitorLabel")
                 val lastSeen = device.lastActivity ?: device.updatedAt ?: device.createdAt
-                val formattedLastSeen = lastSeen?.let {
-                    it.replace("T", " ").substring(0, 19)
-                } ?: "—"
+                val formattedLastSeen = lastSeen?.let { formatDateTimeFriendly(it) } ?: "—"
 
                 Text(
                     text = "Last active: $formattedLastSeen",
@@ -283,5 +286,18 @@ private fun ActiveDeviceCardItem(device: ActiveDeviceItem, onClick: () -> Unit) 
                 }
             }
         }
+    }
+}
+
+private val friendlyFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy, h:mm a")
+
+private fun formatDateTimeFriendly(raw: String): String = runCatching {
+    friendlyFormatter.format(ZonedDateTime.ofInstant(Instant.parse(raw), ZoneId.systemDefault()))
+}.getOrElse {
+    runCatching {
+        val cleaned = raw.removeSuffix("Z")
+        friendlyFormatter.format(LocalDateTime.parse(cleaned).atZone(ZoneId.systemDefault()))
+    }.getOrElse {
+        raw.replace("T", " ").take(19)
     }
 }
