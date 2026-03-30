@@ -28,6 +28,12 @@ import com.security.cameralockfacility.viewmodel.AdminViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.debounce
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 private val BgDark = Color(0xFF0B101F)
 private val CardBg = Color(0xFF161C2C)
@@ -203,7 +209,7 @@ private fun AdminCard(admin: AdminData) {
                 Text(admin.username, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 if (!admin.createdAt.isNullOrBlank()) {
                     Text(
-                        "Joined: ${admin.createdAt.take(10)}",
+                        "Joined: ${formatDateTimeFriendly2(admin.createdAt)}",
                         color = TextGray,
                         fontSize = 12.sp,
                         modifier = Modifier.padding(top = 2.dp)
@@ -216,6 +222,32 @@ private fun AdminCard(admin: AdminData) {
                 color = TextGray,
                 fontSize = 11.sp
             )
+        }
+    }
+}
+private val dateOnlyFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault())
+private fun formatDateTimeFriendly2(raw: String?): String {
+    if (raw.isNullOrBlank()) return ""
+
+    return runCatching {
+        // 1. Try parsing as an Instant (ISO-8601 with Z)
+        val date = ZonedDateTime.ofInstant(Instant.parse(raw), ZoneId.systemDefault())
+        dateOnlyFormatter.format(date)
+    }.getOrElse {
+        runCatching {
+            // 2. Try parsing as LocalDateTime (T separator, no Z)
+            val cleaned = raw.removeSuffix("Z")
+            val date = LocalDateTime.parse(cleaned)
+            dateOnlyFormatter.format(date)
+        }.getOrElse {
+            runCatching {
+                // 3. Try parsing as a simple LocalDate (yyyy-MM-dd)
+                val date = java.time.LocalDate.parse(raw.take(10))
+                dateOnlyFormatter.format(date)
+            }.getOrElse {
+                // 4. Fallback: Just take the first 10 chars (yyyy-MM-dd)
+                raw.take(10)
+            }
         }
     }
 }

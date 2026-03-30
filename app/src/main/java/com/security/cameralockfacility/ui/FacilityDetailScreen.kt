@@ -60,6 +60,7 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 private val FdBgDark = Color(0xFF0B101F)
 private val FdCardBg = Color(0xFF161C2C)
@@ -420,7 +421,7 @@ private fun QRRow(label: String, qr: QRData?, onShow: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             StatusBadge(status)
-            validFor?.let { Text("Valid For: $it", color = FdTextGray, fontSize = 12.sp) }
+            validFor?.let { Text("Valid For: ${formatDateTimeFriendly2(it)}", color = FdTextGray, fontSize = 12.sp) }
             Spacer(Modifier.weight(1f))
             Button(
                 onClick = onShow,
@@ -432,7 +433,7 @@ private fun QRRow(label: String, qr: QRData?, onShow: () -> Unit) {
                 ),
                 shape = RoundedCornerShape(10.dp)
             ) {
-                Text("Show ${label} QR", fontWeight = FontWeight.SemiBold)
+                Text("${label} QR", fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -447,5 +448,32 @@ private fun formatDateTimeFriendly(raw: String): String = runCatching {
         facilityFriendlyFormatter.format(LocalDateTime.parse(cleaned).atZone(ZoneId.systemDefault()))
     }.getOrElse {
         raw.replace("T", " ").take(19)
+    }
+}
+// Example: "30 Mar 2026"
+private val dateOnlyFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault())
+private fun formatDateTimeFriendly2(raw: String?): String {
+    if (raw.isNullOrBlank()) return ""
+
+    return runCatching {
+        // 1. Try parsing as an Instant (ISO-8601 with Z)
+        val date = ZonedDateTime.ofInstant(Instant.parse(raw), ZoneId.systemDefault())
+        dateOnlyFormatter.format(date)
+    }.getOrElse {
+        runCatching {
+            // 2. Try parsing as LocalDateTime (T separator, no Z)
+            val cleaned = raw.removeSuffix("Z")
+            val date = LocalDateTime.parse(cleaned)
+            dateOnlyFormatter.format(date)
+        }.getOrElse {
+            runCatching {
+                // 3. Try parsing as a simple LocalDate (yyyy-MM-dd)
+                val date = java.time.LocalDate.parse(raw.take(10))
+                dateOnlyFormatter.format(date)
+            }.getOrElse {
+                // 4. Fallback: Just take the first 10 chars (yyyy-MM-dd)
+                raw.take(10)
+            }
+        }
     }
 }

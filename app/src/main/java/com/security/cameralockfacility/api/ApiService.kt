@@ -119,11 +119,14 @@ class ApiService(context: Context) {
         } else ApiResult.Error(extractMessage(json), code)
     }
 
-    suspend fun deleteFacility(id: String): ApiResult<FacilityData> {
+    suspend fun deleteFacility(id: String): ApiResult<Unit> { // Change return type to Unit
         val (code, json) = client.delete("/api/admin/facilities/$id")
-        return if (code == 200 && json != null) {
-            ApiResult.Success(parseFacility(json.getJSONObject("data")))
-        } else ApiResult.Error(extractMessage(json), code)
+        return if (code == 200) {
+            // We pass Unit.VALUE (which is just 'Unit') into the Success wrapper
+            ApiResult.Success(Unit)
+        } else {
+            ApiResult.Error(extractMessage(json), code)
+        }
     }
 
     // ─── Devices ───────────────────────────────────────────────────────────────

@@ -50,6 +50,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import android.graphics.Color as AndroidColor
 
 private val QrBgDark = Color(0xFF0B101F)
@@ -77,6 +83,7 @@ fun QRCodeDialog(
         scope.launch {
             val success = withContext(Dispatchers.IO) { saveQRToDownloads(context, bitmap, filename) }
             showSnackbar(if (success) "\"$filename.png\" saved to Downloads" else "Failed to save QR code")
+            onDismiss()
         }
     }
 
@@ -414,7 +421,7 @@ private fun QRCodeSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (validDate.isNotBlank()) {
-                    Text("Valid: $validDate", color = QrTextGray, fontSize = 11.sp)
+                    Text("Valid: ${formatDateTimeFriendly2(validDate)}", color = QrTextGray, fontSize = 11.sp)
                 }
                 if (hasStatus) {
                     val isActive = qrData.status.equals("active", true)
@@ -520,3 +527,29 @@ private data class PendingDownload(
     val qrData: QRData,
     val isEntry: Boolean
 )
+private val dateOnlyFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault())
+private fun formatDateTimeFriendly2(raw: String?): String {
+    if (raw.isNullOrBlank()) return ""
+
+    return runCatching {
+        // 1. Try parsing as an Instant (ISO-8601 with Z)
+        val date = ZonedDateTime.ofInstant(Instant.parse(raw), ZoneId.systemDefault())
+        dateOnlyFormatter.format(date)
+    }.getOrElse {
+        runCatching {
+            // 2. Try parsing as LocalDateTime (T separator, no Z)
+            val cleaned = raw.removeSuffix("Z")
+            val date = LocalDateTime.parse(cleaned)
+            dateOnlyFormatter.format(date)
+        }.getOrElse {
+            runCatching {
+                // 3. Try parsing as a simple LocalDate (yyyy-MM-dd)
+                val date = java.time.LocalDate.parse(raw.take(10))
+                dateOnlyFormatter.format(date)
+            }.getOrElse {
+                // 4. Fallback: Just take the first 10 chars (yyyy-MM-dd)
+                raw.take(10)
+            }
+        }
+    }
+}

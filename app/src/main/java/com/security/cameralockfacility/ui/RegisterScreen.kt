@@ -31,7 +31,7 @@ fun RegisterScreen(navController: NavHostController, viewModel: AuthViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val isLoading = registerState is ApiResult.Loading
-
+    val allowedCharsRegex = "^[a-zA-Z0-9!@#\$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?]*\$".toRegex()
     val BgDark = Color(0xFF0B101F)
     val CardBg = Color(0xFF161C2C)
     val AccentBlue = Color(0xFF2196F3)
@@ -116,14 +116,22 @@ fun RegisterScreen(navController: NavHostController, viewModel: AuthViewModel) {
                     AuthTextField(
                         label = "Username",
                         value = username,
-                        onValueChange = { username = it },
+                        onValueChange = {
+                            if (it.length <= 30 && it.matches(allowedCharsRegex)) {
+                                username = it
+                            }
+                        },
                         enabled = !isLoading
                     )
 
                     AuthTextField(
                         label = "Password",
                         value = password,
-                        onValueChange = { password = it },
+                        onValueChange = {
+                            if (it.length <= 12 && it.matches(allowedCharsRegex)) {
+                                password = it
+                            }
+                        },
                         enabled = !isLoading,
                         isPassword = true,
                         passwordVisible = passwordVisible,
@@ -135,8 +143,11 @@ fun RegisterScreen(navController: NavHostController, viewModel: AuthViewModel) {
                             when {
                                 username.isBlank() || password.isBlank() ->
                                     scope.launch { snackbarHostState.showSnackbar("Username and password are required") }
-                                password.length < 6 ->
-                                    scope.launch { snackbarHostState.showSnackbar("Password must be at least 6 characters") }
+
+                                // Specific Password Length Check (10 to 12)
+                                password.length < 10 ->
+                                    scope.launch { snackbarHostState.showSnackbar("Password must be between 10 and 12 characters") }
+
                                 else -> viewModel.register(username, password)
                             }
                         },

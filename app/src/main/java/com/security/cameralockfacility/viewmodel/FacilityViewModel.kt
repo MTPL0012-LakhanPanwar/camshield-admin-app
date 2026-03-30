@@ -112,7 +112,7 @@ class FacilityViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _deleteState.value = ApiResult.Loading
             _deleteState.value = when (val r = api.deleteFacility(id)) {
-                is ApiResult.Success -> ApiResult.Success("Facility deactivated successfully")
+                is ApiResult.Success -> ApiResult.Success("Facility deleted successfully")
                 is ApiResult.Error -> r
                 else -> null
             }
