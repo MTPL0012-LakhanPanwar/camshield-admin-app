@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.security.cameralockfacility"
+    namespace = "com.camshield.admin"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.security.cameralockfacility"
+        applicationId = "com.camshield.admin"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
